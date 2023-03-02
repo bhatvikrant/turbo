@@ -759,7 +759,7 @@ where
 
     for graph_node in graph_nodes {
         match graph_node {
-            ChunkContentGraphNode::AvailableAsset(asset) => {}
+            ChunkContentGraphNode::AvailableAsset(_asset) => {}
             ChunkContentGraphNode::ChunkItem(chunk_item) => {
                 chunk_items.push(chunk_item);
             }
