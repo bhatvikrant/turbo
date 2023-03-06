@@ -5,6 +5,7 @@ import (
 	gocontext "context"
 	"fmt"
 	"path/filepath"
+	"regexp"
 
 	"github.com/hashicorp/go-hclog"
 	"github.com/pyr-sh/dag"
@@ -90,6 +91,11 @@ func (g *CompleteGraph) GetPackageTaskVisitor(
 		packageTask.Framework = g.TaskHashTracker.GetFramework(packageTask.TaskID)
 
 		if cmd, ok := pkg.Scripts[taskName]; ok {
+			isRootTask := packageTask.PackageName == util.RootPkgName
+			if isRootTask && commandLooksLikeTurbo(cmd) {
+				return fmt.Errorf("root task %v (%v) looks like it invokes turbo and might cause a loop", taskName, cmd)
+			}
+
 			packageTask.Command = cmd
 		}
 
@@ -154,4 +160,10 @@ func (g *CompleteGraph) GetPackageJSONFromWorkspace(workspaceName string) (*fs.P
 // relative path from the root of the monorepo.
 func repoRelativeLogFile(pt *nodes.PackageTask) string {
 	return filepath.Join(pt.Pkg.Dir.ToStringDuringMigration(), ".turbo", fmt.Sprintf("turbo-%v.log", pt.Task))
+}
+
+var _isTurbo = regexp.MustCompile(fmt.Sprintf("(?:^|%v|\\s)turbo(?:$|\\s)", regexp.QuoteMeta(string(filepath.Separator))))
+
+func commandLooksLikeTurbo(command string) bool {
+	return _isTurbo.MatchString(command)
 }

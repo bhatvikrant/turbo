@@ -4,9 +4,6 @@ package run
 
 import (
 	gocontext "context"
-	"fmt"
-	"path/filepath"
-	"regexp"
 
 	"github.com/pkg/errors"
 	"github.com/vercel/turbo/cli/internal/cache"
@@ -16,7 +13,6 @@ import (
 	"github.com/vercel/turbo/cli/internal/nodes"
 	"github.com/vercel/turbo/cli/internal/runsummary"
 	"github.com/vercel/turbo/cli/internal/taskhash"
-	"github.com/vercel/turbo/cli/internal/util"
 )
 
 // missingTaskLabel is printed when a package is missing a definition for a task that is supposed to run
@@ -85,11 +81,6 @@ func executeDryRun(ctx gocontext.Context, engine *core.Engine, g *graph.Complete
 			framework = packageTask.Framework
 		}
 
-		isRootTask := packageTask.PackageName == util.RootPkgName
-		if isRootTask && commandLooksLikeTurbo(command) {
-			return fmt.Errorf("root task %v (%v) looks like it invokes turbo and might cause a loop", packageTask.Task, command)
-		}
-
 		ancestors, err := engine.GetTaskGraphAncestors(packageTask.TaskID)
 		if err != nil {
 			return err
@@ -154,10 +145,4 @@ func executeDryRun(ctx gocontext.Context, engine *core.Engine, g *graph.Complete
 	}
 
 	return taskIDs, nil
-}
-
-var _isTurbo = regexp.MustCompile(fmt.Sprintf("(?:^|%v|\\s)turbo(?:$|\\s)", regexp.QuoteMeta(string(filepath.Separator))))
-
-func commandLooksLikeTurbo(command string) bool {
-	return _isTurbo.MatchString(command)
 }
