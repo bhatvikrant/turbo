@@ -24,6 +24,14 @@ var _defaultEnvVars = []string{
 	"VERCEL_ANALYTICS_ID",
 }
 
+var _emptyGlobalHashable = struct {
+	globalFileHashMap    map[turbopath.AnchoredUnixPath]string
+	rootExternalDepsHash string
+	hashedSortedEnvPairs []string
+	globalCacheKey       string
+	pipeline             fs.PristinePipeline
+}{}
+
 func calculateGlobalHash(rootpath turbopath.AbsoluteSystemPath, rootPackageJSON *fs.PackageJSON, pipeline fs.Pipeline, envVarDependencies []string, globalFileDependencies []string, packageManager *packagemanager.PackageManager, lockFile lockfile.Lockfile, logger hclog.Logger, env []string) (struct {
 	globalFileHashMap    map[turbopath.AnchoredUnixPath]string
 	rootExternalDepsHash string
@@ -50,24 +58,12 @@ func calculateGlobalHash(rootpath turbopath.AbsoluteSystemPath, rootPackageJSON 
 	if len(globalFileDependencies) > 0 {
 		ignores, err := packageManager.GetWorkspaceIgnores(rootpath)
 		if err != nil {
-			return struct {
-				globalFileHashMap    map[turbopath.AnchoredUnixPath]string
-				rootExternalDepsHash string
-				hashedSortedEnvPairs []string
-				globalCacheKey       string
-				pipeline             fs.PristinePipeline
-			}{}, err
+			return _emptyGlobalHashable, err
 		}
 
 		f, err := globby.GlobFiles(rootpath.ToStringDuringMigration(), globalFileDependencies, ignores)
 		if err != nil {
-			return struct {
-				globalFileHashMap    map[turbopath.AnchoredUnixPath]string
-				rootExternalDepsHash string
-				hashedSortedEnvPairs []string
-				globalCacheKey       string
-				pipeline             fs.PristinePipeline
-			}{}, err
+			return _emptyGlobalHashable, err
 		}
 
 		for _, val := range f {
