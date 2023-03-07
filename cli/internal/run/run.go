@@ -255,7 +255,6 @@ func (r *run) run(ctx gocontext.Context, targets []string) error {
 		pkgDepGraph.PackageManager,
 		pkgDepGraph.Lockfile,
 		r.base.Logger,
-		os.Environ(),
 	)
 
 	if err != nil {

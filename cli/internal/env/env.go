@@ -15,6 +15,7 @@ type EnvironmentVariableMap map[string]string
 type BySource struct {
 	Explicit EnvironmentVariableMap
 	Prefixed EnvironmentVariableMap
+	Matching EnvironmentVariableMap
 }
 
 // DetailedMap contains the composite and the detailed maps of environment variables
@@ -32,6 +33,16 @@ func (evm EnvironmentVariableMap) Merge(another EnvironmentVariableMap) {
 	for k, v := range another {
 		evm[k] = v
 	}
+}
+
+// Names returns a sorted list of env var names for the EnvironmentVariableMap
+func (evm EnvironmentVariableMap) Names() []string {
+	names := []string{}
+	for k := range evm {
+		names = append(names, k)
+	}
+	sort.Strings(names)
+	return names
 }
 
 // EnvironmentVariablePairs is a list of "k=v" strings for env variables and their values
@@ -110,6 +121,20 @@ func fromPrefixes(all EnvironmentVariableMap, includes []string, exclude string)
 	return output
 }
 
+func fromMatching(all EnvironmentVariableMap, keyMatchers []string) EnvironmentVariableMap {
+	output := EnvironmentVariableMap{}
+
+	for _, keyMatcher := range keyMatchers {
+		for k, v := range all {
+			if strings.Contains(k, keyMatcher) {
+				output[k] = v
+			}
+		}
+	}
+
+	return output
+}
+
 // GetHashableEnvVars returns all sorted key=value env var pairs for both frameworks and from envKeys
 func GetHashableEnvVars(keys []string, prefixes []string) DetailedMap {
 	all := getEnvMap()
@@ -128,6 +153,26 @@ func GetHashableEnvVars(keys []string, prefixes []string) DetailedMap {
 		BySource: BySource{
 			Explicit: explicit,
 			Prefixed: prefixed,
+		},
+	}
+	return detailedMap
+}
+
+// GetHashableGlobalENVVars returns a map of env vars based on keys
+func GetHashableGlobalENVVars(keys []string, keyMatchers []string) DetailedMap {
+	all := getEnvMap()
+	explicit := fromKeys(all, keys)
+	matching := fromMatching(all, keyMatchers)
+
+	envVars := EnvironmentVariableMap{}
+	envVars.Merge(explicit)
+	envVars.Merge(matching)
+
+	detailedMap := DetailedMap{
+		All: envVars,
+		BySource: BySource{
+			Explicit: explicit,
+			Matching: matching,
 		},
 	}
 	return detailedMap

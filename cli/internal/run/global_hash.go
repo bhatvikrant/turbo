@@ -2,12 +2,11 @@ package run
 
 import (
 	"fmt"
-	"os"
 	"path/filepath"
-	"sort"
 	"strings"
 
 	"github.com/hashicorp/go-hclog"
+	"github.com/vercel/turbo/cli/internal/env"
 	"github.com/vercel/turbo/cli/internal/fs"
 	"github.com/vercel/turbo/cli/internal/globby"
 	"github.com/vercel/turbo/cli/internal/hashing"
@@ -32,7 +31,7 @@ var _emptyGlobalHashable = struct {
 	pipeline             fs.PristinePipeline
 }{}
 
-func calculateGlobalHash(rootpath turbopath.AbsoluteSystemPath, rootPackageJSON *fs.PackageJSON, pipeline fs.Pipeline, envVarDependencies []string, globalFileDependencies []string, packageManager *packagemanager.PackageManager, lockFile lockfile.Lockfile, logger hclog.Logger, env []string) (struct {
+func calculateGlobalHash(rootpath turbopath.AbsoluteSystemPath, rootPackageJSON *fs.PackageJSON, pipeline fs.Pipeline, envVarDependencies []string, globalFileDependencies []string, packageManager *packagemanager.PackageManager, lockFile lockfile.Lockfile, logger hclog.Logger) (struct {
 	globalFileHashMap    map[turbopath.AnchoredUnixPath]string
 	rootExternalDepsHash string
 	hashedSortedEnvPairs []string
@@ -40,18 +39,13 @@ func calculateGlobalHash(rootpath turbopath.AbsoluteSystemPath, rootPackageJSON 
 	pipeline             fs.PristinePipeline
 }, error) {
 	// Calculate env var dependencies
-	globalHashableEnvNames := []string{}
-	globalHashableEnvPairs := []string{}
-	for _, builtinEnvVar := range _defaultEnvVars {
-		globalHashableEnvNames = append(globalHashableEnvNames, builtinEnvVar)
-		globalHashableEnvPairs = append(globalHashableEnvPairs, fmt.Sprintf("%v=%v", builtinEnvVar, os.Getenv(builtinEnvVar)))
-	}
-
-	// Calculate global env var dependencies
-	for _, v := range envVarDependencies {
-		globalHashableEnvNames = append(globalHashableEnvNames, v)
-		globalHashableEnvPairs = append(globalHashableEnvPairs, fmt.Sprintf("%v=%v", v, os.Getenv(v)))
-	}
+	envVars := []string{}
+	envVars = append(envVars, envVarDependencies...)
+	envVars = append(envVars, _defaultEnvVars...)
+	globalHashableEnvVars := env.GetHashableGlobalENVVars(envVars, []string{"THASH"})
+	globalHashableEnvNames := globalHashableEnvVars.All.Names()
+	globalHashableEnvPairs := globalHashableEnvVars.All.ToHashable()
+	logger.Debug("global hash env vars", "vars", globalHashableEnvNames)
 
 	// Calculate global file dependencies
 	globalDeps := make(util.Set)
@@ -70,16 +64,6 @@ func calculateGlobalHash(rootpath turbopath.AbsoluteSystemPath, rootPackageJSON 
 			globalDeps.Add(val)
 		}
 	}
-
-	// get system env vars for hashing purposes, these include any variable that includes "TURBO"
-	// that is NOT TURBO_TOKEN or TURBO_TEAM or TURBO_BINARY_PATH.
-	names, pairs := getHashableTurboEnvVarsFromOs(env)
-	globalHashableEnvNames = append(globalHashableEnvNames, names...)
-	globalHashableEnvPairs = append(globalHashableEnvPairs, pairs...)
-	// sort them for consistent hashing
-	sort.Strings(globalHashableEnvNames)
-	sort.Strings(globalHashableEnvPairs)
-	logger.Debug("global hash env vars", "vars", globalHashableEnvNames)
 
 	if lockFile == nil {
 		// If we don't have lockfile information available, add the specfile and lockfile to global deps
