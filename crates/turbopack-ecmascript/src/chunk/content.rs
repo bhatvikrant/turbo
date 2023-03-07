@@ -3,10 +3,10 @@ use std::io::Write as _;
 use anyhow::{anyhow, bail, Result};
 use indexmap::IndexSet;
 use indoc::{indoc, writedoc};
-use turbo_tasks::TryJoinIterExt;
+use turbo_tasks::{TryJoinIterExt, ValueToString};
 use turbo_tasks_fs::{embed_file, File, FileContent, FileSystemPathReadRef, FileSystemPathVc};
 use turbopack_core::{
-    asset::{AssetContentVc, AssetVc},
+    asset::{Asset, AssetContentVc, AssetVc},
     chunk::{
         available_assets::AvailableAssetsVc, chunk_content, chunk_content_split,
         ChunkContentResult, ChunkGroupVc, ChunkVc, ChunkingContext, ChunkingContextVc, ModuleId,
@@ -174,6 +174,8 @@ async fn ecmascript_chunk_content_single_entry(
 
 #[turbo_tasks::value(serialization = "none")]
 pub(super) struct EcmascriptChunkContent {
+    main_entries: EcmascriptChunkPlaceablesVc,
+    omit_entries: Option<EcmascriptChunkPlaceablesVc>,
     pub(super) module_factories: EcmascriptChunkContentEntriesSnapshotReadRef,
     pub(super) chunk_path: FileSystemPathReadRef,
     pub(super) output_root: FileSystemPathReadRef,
@@ -207,6 +209,8 @@ impl EcmascriptChunkContentVc {
         let module_factories = chunk_content.chunk_items.to_entry_snapshot().await?;
         let output_root = context.output_root().await?;
         Ok(EcmascriptChunkContent {
+            main_entries,
+            omit_entries,
             module_factories,
             chunk_path,
             output_root,
@@ -256,6 +260,14 @@ impl EcmascriptChunkContentVc {
             );
         };
         let mut code = CodeBuilder::default();
+        for entry in &*this.main_entries.await? {
+            writeln!(code, "/* entry {} */", entry.ident().to_string().await?)?;
+        }
+        if let Some(omit_entries) = this.omit_entries {
+            for entry in &*omit_entries.await? {
+                writeln!(code, "/* omit {} */", entry.ident().to_string().await?)?;
+            }
+        }
         code += "(self.TURBOPACK = self.TURBOPACK || []).push([";
 
         writeln!(code, "{}, {{", stringify_js(chunk_server_path))?;
