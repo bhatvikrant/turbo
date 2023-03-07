@@ -112,6 +112,11 @@ func RealRun(
 	// Assign tasks after execution
 	runSummary.Tasks = taskSummaries
 
+	// We walk the graph with no concurrency.
+	// Populating the cache state is parallelizable.
+	// Do this _after_ walking the graph.
+	runSummary.PopulateCacheState(turboCache)
+
 	for _, err := range errs {
 		if errors.As(err, &exitCodeErr) {
 			if exitCodeErr.ExitCode > exitCode {

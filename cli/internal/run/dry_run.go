@@ -58,6 +58,11 @@ func DryRun(
 	// Assign the Task Summaries to the main summary
 	summary.Tasks = taskSummaries
 
+	// We walk the graph with no concurrency.
+	// Populating the cache state is parallelizable.
+	// Do this _after_ walking the graph.
+	summary.PopulateCacheState(turboCache)
+
 	// Render the dry run as json
 	if dryRunJSON {
 		rendered, err := summary.FormatJSON(singlePackage)
