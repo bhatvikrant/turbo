@@ -15,7 +15,7 @@ use crate::{
         EcmascriptChunkItem, EcmascriptChunkItemContent, EcmascriptChunkItemContentVc,
         EcmascriptChunkItemVc,
     },
-    utils::stringify_js_pretty,
+    utils::StringifyJs,
 };
 
 /// The ManifestChunkItem generates a __turbopack_load__ call for every chunk
@@ -62,7 +62,7 @@ impl EcmascriptChunkItem for ManifestChunkItem {
             r#"
                 __turbopack_export_value__({chunk_paths});
             "#,
-            chunk_paths = stringify_js_pretty(&chunk_server_paths)
+            chunk_paths = StringifyJs::new_pretty(&chunk_server_paths)
         };
 
         Ok(EcmascriptChunkItemContent {

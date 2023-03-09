@@ -30,7 +30,7 @@ use turbopack_ecmascript::{
         EcmascriptChunkItemVc, EcmascriptChunkPlaceable, EcmascriptChunkPlaceableVc,
         EcmascriptChunkVc, EcmascriptExports, EcmascriptExportsVc,
     },
-    utils::stringify_js,
+    utils::StringifyJs,
 };
 
 #[turbo_tasks::function]
@@ -191,7 +191,10 @@ impl EcmascriptChunkItem for ModuleChunkItem {
         Ok(EcmascriptChunkItemContent {
             inner_code: format!(
                 "__turbopack_export_value__({path});",
-                path = stringify_js(&format!("/{}", &*self.static_asset.ident().path().await?))
+                path = StringifyJs::new(&format_args!(
+                    "/{}",
+                    &*self.static_asset.ident().path().await?
+                ))
             )
             .into(),
             ..Default::default()

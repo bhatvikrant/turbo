@@ -22,3 +22,9 @@ export type ModuleEffect =
       moduleId: ModuleId;
       outdatedModules: Set<ModuleId>;
     };
+
+export type DevRuntimeParams = {
+  chunkDependencies: ChunkPath[];
+  runtimeModuleIds: ModuleId[];
+  chunkListPath: ChunkPath;
+};

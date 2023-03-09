@@ -25,6 +25,7 @@ pub mod webpack;
 use anyhow::Result;
 use chunk::{
     EcmascriptChunkItem, EcmascriptChunkItemVc, EcmascriptChunkPlaceablesVc, EcmascriptChunkVc,
+    EcmascriptDevChunkRuntimeVc,
 };
 use code_gen::CodeGenerateableVc;
 use indexmap::IndexMap;
@@ -166,7 +167,19 @@ impl EcmascriptModuleAssetVc {
         context: ChunkingContextVc,
         runtime_entries: Option<EcmascriptChunkPlaceablesVc>,
     ) -> Result<ChunkVc> {
-        Ok(EcmascriptChunkVc::new_evaluate(context, self_vc.into(), runtime_entries).into())
+        let mut main_entries = vec![];
+        if let Some(runtime_entries) = runtime_entries {
+            main_entries.extend(runtime_entries.await?.iter().copied());
+        }
+        // The main entry must always be the last entry, so all other entries
+        // have been executed first.
+        main_entries.push(self_vc.into());
+        Ok(EcmascriptChunkVc::new_runtime(
+            context,
+            EcmascriptChunkPlaceablesVc::cell(main_entries),
+            EcmascriptDevChunkRuntimeVc::new(context, self_vc.into()).into(),
+        )
+        .into())
     }
 
     #[turbo_tasks::function]

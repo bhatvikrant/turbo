@@ -2,13 +2,10 @@ use anyhow::Result;
 use indoc::formatdoc;
 use turbo_tasks::{primitives::StringVc, ValueToString, ValueToStringVc};
 use turbo_tasks_fs::FileSystemPathVc;
-use turbopack::ecmascript::{
-    chunk::{
-        EcmascriptChunkItem, EcmascriptChunkItemContent, EcmascriptChunkItemContentVc,
-        EcmascriptChunkItemVc, EcmascriptChunkPlaceable, EcmascriptChunkPlaceableVc,
-        EcmascriptChunkVc, EcmascriptExports, EcmascriptExportsVc,
-    },
-    utils::stringify_js,
+use turbopack::ecmascript::chunk::{
+    EcmascriptChunkItem, EcmascriptChunkItemContent, EcmascriptChunkItemContentVc,
+    EcmascriptChunkItemVc, EcmascriptChunkPlaceable, EcmascriptChunkPlaceableVc, EcmascriptChunkVc,
+    EcmascriptExports, EcmascriptExportsVc,
 };
 use turbopack_core::{
     asset::{Asset, AssetContentVc, AssetVc},
@@ -21,7 +18,7 @@ use turbopack_core::{
     reference::{AssetReference, AssetReferenceVc, AssetReferencesVc},
     resolve::{ResolveResult, ResolveResultVc},
 };
-use turbopack_ecmascript::utils::stringify_js_pretty;
+use turbopack_ecmascript::utils::StringifyJs;
 
 use crate::next_client_chunks::in_chunking_context_asset::InChunkingContextAsset;
 
@@ -127,7 +124,7 @@ impl EcmascriptChunkItem for WithClientChunksChunkItem {
             }
         }
 
-        let module_id = stringify_js(&*inner.asset.as_chunk_item(self.context).id().await?);
+        let module_id = inner.asset.as_chunk_item(self.context).id().await?;
         Ok(EcmascriptChunkItemContent {
             inner_code: formatdoc!(
                 // We store the chunks in a binding, otherwise a new array would be created every
@@ -139,8 +136,8 @@ impl EcmascriptChunkItem for WithClientChunksChunkItem {
                     }});
                     const chunks = {};
                 "#,
-                module_id,
-                stringify_js_pretty(&client_chunks),
+                StringifyJs::new(&module_id),
+                StringifyJs::new_pretty(&client_chunks),
             )
             .into(),
             ..Default::default()

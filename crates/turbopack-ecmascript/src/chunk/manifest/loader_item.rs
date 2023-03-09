@@ -23,7 +23,7 @@ use crate::{
         },
         placeable::{EcmascriptChunkPlaceable, EcmascriptChunkPlaceableVc},
     },
-    utils::stringify_js,
+    utils::StringifyJs,
 };
 
 #[turbo_tasks::function]
@@ -154,10 +154,10 @@ impl EcmascriptChunkItem for ManifestLoaderItem {
                     }});
                 }});
             "#,
-            chunk_server_path = stringify_js(chunk_server_path),
-            item_id = stringify_js(item_id),
-            dynamic_id = stringify_js(dynamic_id),
-            chunk_list_path = stringify_js(
+            chunk_server_path = StringifyJs::new(chunk_server_path),
+            item_id = StringifyJs::new(item_id),
+            dynamic_id = StringifyJs::new(dynamic_id),
+            chunk_list_path = StringifyJs::new_pretty(
                 output_root
                     .get_path_to(&*self_vc.chunk_list_path().await?)
                     .ok_or(anyhow!("chunk list path is not in output root"))?

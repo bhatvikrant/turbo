@@ -32,7 +32,7 @@ use turbopack_ecmascript::{
         EcmascriptChunkItemVc, EcmascriptChunkPlaceable, EcmascriptChunkPlaceableVc,
         EcmascriptChunkVc, EcmascriptExports, EcmascriptExportsVc,
     },
-    utils::stringify_js,
+    utils::StringifyJs,
     ParseResultSourceMap, ParseResultSourceMapVc,
 };
 
@@ -328,16 +328,16 @@ impl EcmascriptChunkItem for ModuleChunkItem {
                             unreachable!("ModuleCssModuleAsset implements EcmascriptChunkPlaceableVc");
                         };
 
-                        let module_id =
-                            stringify_js(&*placeable.as_chunk_item(self.context).id().await?);
-                        let original_name = stringify_js(original_name);
+                        let module_id = placeable.as_chunk_item(self.context).id().await?;
+                        let module_id = StringifyJs::new(&*module_id);
+                        let original_name = StringifyJs::new(original_name);
                         exported_class_names.push(format! {
                             "__turbopack_import__({module_id})[{original_name}]"
                         });
                     }
                     ModuleCssClass::Local { name: class_name }
                     | ModuleCssClass::Global { name: class_name } => {
-                        exported_class_names.push(stringify_js(class_name));
+                        exported_class_names.push(StringifyJs::new(class_name).to_string());
                     }
                 }
             }
@@ -345,7 +345,7 @@ impl EcmascriptChunkItem for ModuleChunkItem {
             writeln!(
                 code,
                 "  {}: {},",
-                stringify_js(export_name),
+                StringifyJs::new(export_name),
                 exported_class_names.join(" + \" \" + ")
             )?;
         }

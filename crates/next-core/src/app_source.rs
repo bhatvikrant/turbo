@@ -30,7 +30,7 @@ use turbopack_dev_server::{
     },
 };
 use turbopack_ecmascript::{
-    chunk::EcmascriptChunkPlaceablesVc, magic_identifier, utils::stringify_js,
+    chunk::EcmascriptChunkPlaceablesVc, magic_identifier, utils::StringifyJs,
     EcmascriptInputTransformsVc, EcmascriptModuleAssetType, EcmascriptModuleAssetVc, InnerAssetsVc,
 };
 use turbopack_env::ProcessEnvAssetVc;
@@ -575,7 +575,7 @@ impl AppRendererVc {
                                     ));
                                 }
                             }
-                            Ok((stringify_js(segment_path), imports))
+                            Ok((StringifyJs::new(segment_path).to_string(), imports))
                         });
                         futures
                     })
@@ -600,7 +600,7 @@ impl AppRendererVc {
                     "import {}, {{ chunks as {} }} from {};\n",
                     identifier,
                     chunks_identifier,
-                    stringify_js(p)
+                    StringifyJs::new(p)
                 )?
             }
         }
@@ -610,7 +610,7 @@ impl AppRendererVc {
                 r#"("TURBOPACK {{ transition: next-client }}");
 import BOOTSTRAP from {};
 "#,
-                stringify_js(&page)
+                StringifyJs::new(&page)
             )?;
         }
 
@@ -621,7 +621,7 @@ import BOOTSTRAP from {};
                 writeln!(
                     result,
                     "    {key}: {{ module: {identifier}, chunks: {chunks_identifier} }},",
-                    key = stringify_js(key),
+                    key = StringifyJs::new(key),
                 )?;
             }
             result += "  },";

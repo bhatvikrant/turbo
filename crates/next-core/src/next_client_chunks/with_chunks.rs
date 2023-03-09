@@ -3,13 +3,10 @@ use indoc::formatdoc;
 use serde_json::Value;
 use turbo_tasks::{primitives::StringVc, TryJoinIterExt, ValueToString, ValueToStringVc};
 use turbo_tasks_fs::FileSystemPathVc;
-use turbopack::ecmascript::{
-    chunk::{
-        EcmascriptChunkItem, EcmascriptChunkItemContent, EcmascriptChunkItemContentVc,
-        EcmascriptChunkItemVc, EcmascriptChunkPlaceable, EcmascriptChunkPlaceableVc,
-        EcmascriptChunkVc, EcmascriptExports, EcmascriptExportsVc,
-    },
-    utils::stringify_js,
+use turbopack::ecmascript::chunk::{
+    EcmascriptChunkItem, EcmascriptChunkItemContent, EcmascriptChunkItemContentVc,
+    EcmascriptChunkItemVc, EcmascriptChunkPlaceable, EcmascriptChunkPlaceableVc, EcmascriptChunkVc,
+    EcmascriptExports, EcmascriptExportsVc,
 };
 use turbopack_core::{
     asset::{Asset, AssetContentVc, AssetVc},
@@ -22,7 +19,7 @@ use turbopack_core::{
     reference::{AssetReference, AssetReferenceVc, AssetReferencesVc},
     resolve::{ResolveResult, ResolveResultVc},
 };
-use turbopack_ecmascript::utils::stringify_js_pretty;
+use turbopack_ecmascript::utils::StringifyJs;
 
 use super::in_chunking_context_asset::InChunkingContextAsset;
 
@@ -142,19 +139,20 @@ impl EcmascriptChunkItem for WithChunksChunkItem {
                 client_chunks.push(Value::String(path.to_string()));
             }
         }
-        let module_id = stringify_js(&*inner.asset.as_chunk_item(this.inner_context).id().await?);
+        let module_id = inner.asset.as_chunk_item(this.inner_context).id().await?;
         Ok(EcmascriptChunkItemContent {
             inner_code: formatdoc! {
                 r#"
                 __turbopack_esm__({{
                     default: () => {},
-                    chunks: () => {},
+                    chunks: () => chunks,
                     chunkListPath: () => {},
                 }});
+                const chunks = {};
                 "#,
-                module_id,
-                stringify_js_pretty(&client_chunks),
-                stringify_js(&chunk_list_path),
+                StringifyJs::new(&module_id),
+                StringifyJs::new(&chunk_list_path),
+                StringifyJs::new_pretty(&client_chunks),
             }
             .into(),
             ..Default::default()

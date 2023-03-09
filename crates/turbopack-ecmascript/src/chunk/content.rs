@@ -1,18 +1,17 @@
 use std::io::Write as _;
 
-use anyhow::{anyhow, bail, Result};
+use anyhow::{bail, Result};
 use indexmap::IndexSet;
-use indoc::{indoc, writedoc};
-use turbo_tasks::TryJoinIterExt;
-use turbo_tasks_fs::{embed_file, File, FileContent, FileSystemPathReadRef, FileSystemPathVc};
+use indoc::writedoc;
+use turbo_tasks_fs::{File, FileSystemPathReadRef, FileSystemPathVc};
 use turbopack_core::{
     asset::AssetContentVc,
     chunk::{
         chunk_content, chunk_content_split, ChunkContentResult, ChunkGroupVc, ChunkVc,
         ChunkingContext, ChunkingContextVc, ModuleId,
     },
-    code_builder::{CodeBuilder, CodeVc},
-    environment::{ChunkLoading, EnvironmentVc},
+    code_builder::{CodeBuilder, CodeReadRef, CodeVc},
+    environment::EnvironmentVc,
     reference::AssetReferenceVc,
     source_map::{GenerateSourceMap, GenerateSourceMapVc, OptionSourceMapVc, SourceMapVc},
     version::{
@@ -22,14 +21,13 @@ use turbopack_core::{
 };
 
 use super::{
-    evaluate::EcmascriptChunkContentEvaluateVc,
     item::{EcmascriptChunkItemVc, EcmascriptChunkItems, EcmascriptChunkItemsVc},
     merged::merger::EcmascriptChunkContentMergerVc,
     placeable::{EcmascriptChunkPlaceableVc, EcmascriptChunkPlaceablesVc},
     snapshot::EcmascriptChunkContentEntriesSnapshotReadRef,
     version::{EcmascriptChunkVersion, EcmascriptChunkVersionVc},
 };
-use crate::utils::stringify_js;
+use crate::utils::StringifyJs;
 
 #[turbo_tasks::value]
 pub struct EcmascriptChunkContentResult {
@@ -142,7 +140,8 @@ pub(super) struct EcmascriptChunkContent {
     pub(super) module_factories: EcmascriptChunkContentEntriesSnapshotReadRef,
     pub(super) chunk_path: FileSystemPathReadRef,
     pub(super) output_root: FileSystemPathReadRef,
-    pub(super) evaluate: Option<EcmascriptChunkContentEvaluateVc>,
+    pub(super) runtime_params: Option<CodeReadRef>,
+    pub(super) runtime_code: Option<CodeReadRef>,
     pub(super) environment: EnvironmentVc,
 }
 
@@ -154,7 +153,8 @@ impl EcmascriptChunkContentVc {
         main_entries: EcmascriptChunkPlaceablesVc,
         omit_entries: Option<EcmascriptChunkPlaceablesVc>,
         chunk_path: FileSystemPathVc,
-        evaluate: Option<EcmascriptChunkContentEvaluateVc>,
+        runtime_params: Option<CodeVc>,
+        runtime_code: Option<CodeVc>,
     ) -> Result<Self> {
         // TODO(alexkirsz) All of this should be done in a transition, otherwise we run
         // the risks of values not being strongly consistent with each other.
@@ -163,11 +163,22 @@ impl EcmascriptChunkContentVc {
         let chunk_path = chunk_path.await?;
         let module_factories = chunk_content.chunk_items.to_entry_snapshot().await?;
         let output_root = context.output_root().await?;
+        let runtime_params = if let Some(runtime_params) = runtime_params {
+            Some(runtime_params.await?)
+        } else {
+            None
+        };
+        let runtime_code = if let Some(runtime_code) = runtime_code {
+            Some(runtime_code.await?)
+        } else {
+            None
+        };
         Ok(EcmascriptChunkContent {
             module_factories,
             chunk_path,
             output_root,
-            evaluate,
+            runtime_params,
+            runtime_code,
             environment: context.environment(),
         }
         .cell())
@@ -213,110 +224,35 @@ impl EcmascriptChunkContentVc {
             );
         };
         let mut code = CodeBuilder::default();
-        code += "(self.TURBOPACK = self.TURBOPACK || []).push([";
 
-        writeln!(code, "{}, {{", stringify_js(chunk_server_path))?;
+        writedoc!(
+            code,
+            r#"
+                (self.TURBOPACK = self.TURBOPACK || []).push([
+                {chunk_path},
+                {{
+            "#,
+            chunk_path = StringifyJs::new(chunk_server_path)
+        )?;
+
         for entry in &this.module_factories {
-            write!(code, "\n{}: ", &stringify_js(entry.id()))?;
+            write!(code, "\n{}: ", StringifyJs::new(entry.id()))?;
             code.push_code(entry.code());
-            code += ",";
+            write!(code, ",")?;
         }
-        code += "\n}";
 
-        if let Some(evaluate) = &this.evaluate {
-            let evaluate = evaluate.await?;
-            let condition = evaluate
-                .ecma_chunks_server_paths
-                .iter()
-                .map(|path| format!(" && loadedChunks.has({})", stringify_js(path)))
-                .collect::<Vec<_>>()
-                .join("");
-            let entries_instantiations = evaluate
-                .entry_modules_ids
-                .iter()
-                .map(|id| async move {
-                    let id = id.await?;
-                    let id = stringify_js(&id);
-                    Ok(format!(r#"    instantiateRuntimeModule({id});"#)) as Result<_>
-                })
-                .try_join()
-                .await?
-                .join("\n");
+        write!(code, "\n}}")?;
 
-            let chunk_list_register = evaluate
-                .chunk_list_path
-                .as_deref()
-                .map(|path| {
-                    format!(
-                        r#"registerChunkList({}, {});"#,
-                        stringify_js(&path),
-                        stringify_js(
-                            &evaluate
-                                .ecma_chunks_server_paths
-                                .iter()
-                                .chain(&evaluate.other_chunks_server_paths)
-                                .collect::<Vec<_>>()
-                        )
-                    )
-                })
-                .unwrap_or_else(String::new);
-            // Add a runnable to the chunk that requests the entry module to ensure it gets
-            // executed when the chunk is evaluated.
-            // The condition stops the entry module from being executed while chunks it
-            // depend on have not yet been registered.
-            // The runnable will run every time a new chunk is `.push`ed to TURBOPACK, until
-            // all dependent chunks have been evaluated.
-            writedoc!(
-                code,
-                r#"
-                    , ({{ loadedChunks, instantiateRuntimeModule, registerChunkList }}) => {{
-                        if (!(true{condition})) return true;
-                        {chunk_list_register}
-                    {entries_instantiations}
-                    }}
-                "#
-            )?;
+        if let Some(runtime_params) = &this.runtime_params {
+            write!(code, ",\n")?;
+            code.push_code(&*runtime_params);
         }
-        code += "]);\n";
-        if this.evaluate.is_some() {
-            // When a chunk is executed, it will either register itself with the current
-            // instance of the runtime, or it will push itself onto the list of pending
-            // chunks (`self.TURBOPACK`).
-            //
-            // When the runtime executes, it will pick up and register all pending chunks,
-            // and replace the list of pending chunks with itself so later chunks can
-            // register directly with it.
-            writedoc!(
-                code,
-                r#"
-                    (() => {{
-                    if (!Array.isArray(globalThis.TURBOPACK)) {{
-                        return;
-                    }}
-                "#
-            )?;
 
-            let specific_runtime_code = match *this.environment.chunk_loading().await? {
-                ChunkLoading::None => embed_file!("js/src/runtime.none.js").await?,
-                ChunkLoading::NodeJs => embed_file!("js/src/runtime.nodejs.js").await?,
-                ChunkLoading::Dom => embed_file!("js/src/runtime.dom.js").await?,
-            };
+        write!(code, "]);")?;
 
-            match &*specific_runtime_code {
-                FileContent::NotFound => return Err(anyhow!("specific runtime code is not found")),
-                FileContent::Content(file) => code.push_source(file.content(), None),
-            };
-
-            let shared_runtime_code = embed_file!("js/src/runtime.js").await?;
-
-            match &*shared_runtime_code {
-                FileContent::NotFound => return Err(anyhow!("shared runtime code is not found")),
-                FileContent::Content(file) => code.push_source(file.content(), None),
-            };
-
-            code += indoc! { r#"
-                })();
-            "# };
+        if let Some(runtime_code) = &this.runtime_code {
+            write!(code, "\n")?;
+            code.push_code(&*runtime_code);
         }
 
         if code.has_source_map() {

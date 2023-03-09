@@ -10,9 +10,6 @@
 /** @typedef {import('../types').Module} Module */
 /** @typedef {import('../types').Exports} Exports */
 /** @typedef {import('../types').EsmInteropNamespace} EsmInteropNamespace */
-/** @typedef {import('../types').Runnable} Runnable */
-
-/** @typedef {import('../types').Runtime} Runtime */
 
 /** @typedef {import('../types').RefreshHelpers} RefreshHelpers */
 /** @typedef {import('../types/hot').Hot} Hot */
@@ -28,9 +25,8 @@
 
 /** @typedef {import('../types/runtime').Loader} Loader */
 /** @typedef {import('../types/runtime').ModuleEffect} ModuleEffect */
+/** @typedef {import('../types/runtime').DevRuntimeParams} DevRuntimeParams */
 
-/** @type {Array<Runnable>} */
-let runnable = [];
 /** @type {Object.<ModuleId, ModuleFactory>} */
 const moduleFactories = { __proto__: null };
 /** @type {Object.<ModuleId, Module>} */
@@ -1303,19 +1299,10 @@ function markChunkAsLoaded(chunkPath) {
   chunkLoader.onLoad();
 }
 
-/** @type {Runtime} */
-const runtime = {
-  loadedChunks,
-  modules: moduleFactories,
-  cache: moduleCache,
-  instantiateRuntimeModule,
-  registerChunkList: registerChunkListAndMarkAsRuntime,
-};
-
 /**
  * @param {ChunkRegistration} chunkRegistration
  */
-function registerChunk([chunkPath, chunkModules, ...run]) {
+function registerChunk([chunkPath, chunkModules, runtimeParams]) {
   markChunkAsLoaded(chunkPath);
   for (const [moduleId, moduleFactory] of Object.entries(chunkModules)) {
     if (!moduleFactories[moduleId]) {
@@ -1323,8 +1310,44 @@ function registerChunk([chunkPath, chunkModules, ...run]) {
     }
     addModuleToChunk(moduleId, chunkPath);
   }
-  runnable.push(...run);
-  runnable = runnable.filter((r) => r(runtime));
+
+  if (runtimeParams) {
+    evaluateRuntimeParams(chunkPath, runtimeParams).catch((err) => {
+      console.error(
+        `Failed to evaluate runtime params for chunk ${chunkPath}`,
+        err
+      );
+    });
+  }
+}
+
+/**
+ * @param {ChunkPath} chunkPath
+ * @param {DevRuntimeParams} runtimeParams
+ */
+async function evaluateRuntimeParams(chunkPath, runtimeParams) {
+  registerChunkListAndMarkAsRuntime(runtimeParams.chunkListPath, [
+    chunkPath,
+    ...runtimeParams.chunkDependencies,
+  ]);
+
+  await waitForChunksToLoad(chunkPath, runtimeParams.chunkDependencies);
+
+  for (const moduleId of runtimeParams.runtimeModuleIds) {
+    instantiateRuntimeModule(moduleId);
+  }
+}
+
+/**
+ * @param {ChunkPath} chunkPath
+ * @param {ChunkPath[]} chunkPaths
+ */
+async function waitForChunksToLoad(chunkPath, chunkPaths) {
+  await Promise.all(
+    chunkPaths.map((chunkPathDependency) =>
+      loadChunk(chunkPath, chunkPathDependency)
+    )
+  );
 }
 
 globalThis.TURBOPACK_CHUNK_UPDATE_LISTENERS =

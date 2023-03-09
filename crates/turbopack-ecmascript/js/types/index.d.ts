@@ -1,6 +1,7 @@
 import { RefreshRuntimeGlobals } from "@next/react-refresh-utils/dist/runtime";
 import { ServerMessage } from "./protocol";
 import { Hot } from "./hot";
+import { DevRuntimeParams } from "./runtime";
 
 export type RefreshHelpers = RefreshRuntimeGlobals["$RefreshHelpers$"];
 
@@ -16,11 +17,10 @@ interface Exports {
 }
 
 export type ChunkModule = () => void;
-export type Runnable = (...args: any[]) => boolean;
 export type ChunkRegistration = [
   chunkPath: ChunkPath,
   chunkModules: ChunkModule[],
-  ...run: Runnable[]
+  DevRuntimeParams | undefined
 ];
 
 interface Module {
@@ -66,15 +66,6 @@ type ModuleFactory = (
 
 // string encoding of a module factory (used in hmr updates)
 type ModuleFactoryString = string;
-
-interface Runtime {
-  loadedChunks: Set<ChunkPath>;
-  modules: Record<ModuleId, ModuleFactory>;
-  cache: Record<string, Module>;
-
-  instantiateRuntimeModule: (moduleId: ModuleId) => Module;
-  registerChunkList: (chunkPath: ChunkPath, chunkPaths: ChunkPath[]) => void;
-}
 
 interface RuntimeBackend {
   loadChunk: (chunkPath: ChunkPath, from?: ModuleId) => Promise<void>;

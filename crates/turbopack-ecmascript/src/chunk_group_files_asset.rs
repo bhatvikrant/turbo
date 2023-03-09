@@ -22,7 +22,7 @@ use crate::{
         EcmascriptChunkItemVc, EcmascriptChunkPlaceable, EcmascriptChunkPlaceableVc,
         EcmascriptChunkPlaceablesVc, EcmascriptChunkVc, EcmascriptExports, EcmascriptExportsVc,
     },
-    utils::stringify_js_pretty,
+    utils::StringifyJs,
     EcmascriptModuleAssetVc,
 };
 
@@ -36,9 +36,8 @@ fn modifier() -> StringVc {
 #[turbo_tasks::value(shared)]
 pub struct ChunkGroupFilesAsset {
     pub asset: ChunkableAssetVc,
+    pub client_root: FileSystemPathVc,
     pub chunking_context: ChunkingContextVc,
-    pub base_path: FileSystemPathVc,
-    pub server_root: FileSystemPathVc,
     pub runtime_entries: Option<EcmascriptChunkPlaceablesVc>,
 }
 
@@ -101,6 +100,7 @@ impl EcmascriptChunkPlaceable for ChunkGroupFilesAsset {
         let this = self_vc.await?;
         Ok(ChunkGroupFilesChunkItem {
             context,
+            client_root: this.client_root,
             inner: self_vc,
             chunk: this.asset.as_chunk(context),
         }
@@ -117,6 +117,7 @@ impl EcmascriptChunkPlaceable for ChunkGroupFilesAsset {
 #[turbo_tasks::value]
 struct ChunkGroupFilesChunkItem {
     context: ChunkingContextVc,
+    client_root: FileSystemPathVc,
     inner: ChunkGroupFilesAssetVc,
     chunk: ChunkVc,
 }
@@ -131,7 +132,7 @@ impl EcmascriptChunkItem for ChunkGroupFilesChunkItem {
     #[turbo_tasks::function]
     async fn content(&self) -> Result<EcmascriptChunkItemContentVc> {
         let chunks = self.inner.chunk_group().chunks();
-        let base_path = self.inner.await?.base_path.await?;
+        let client_root = self.client_root.await?;
         let chunks_paths = chunks
             .await?
             .iter()
@@ -140,12 +141,12 @@ impl EcmascriptChunkItem for ChunkGroupFilesChunkItem {
             .await?;
         let chunks_paths: Vec<_> = chunks_paths
             .iter()
-            .filter_map(|path| base_path.get_path_to(path))
+            .filter_map(|path| client_root.get_path_to(path))
             .collect();
         Ok(EcmascriptChunkItemContent {
             inner_code: format!(
                 "__turbopack_export_value__({});\n",
-                stringify_js_pretty(&chunks_paths)
+                StringifyJs::new_pretty(&chunks_paths)
             )
             .into(),
             ..Default::default()

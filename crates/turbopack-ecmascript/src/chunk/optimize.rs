@@ -11,7 +11,7 @@ use turbopack_core::chunk::{
     ChunkGroupVc, ChunkVc, ChunkingContextVc, ChunksVc,
 };
 
-use super::{evaluate::EcmascriptChunkEvaluate, EcmascriptChunkPlaceablesVc, EcmascriptChunkVc};
+use super::{runtime::EcmascriptChunkRuntime, EcmascriptChunkPlaceablesVc, EcmascriptChunkVc};
 
 #[turbo_tasks::value]
 pub struct EcmascriptChunkOptimizer(ChunkingContextVc);
@@ -62,12 +62,12 @@ async fn merge_chunks(
         .iter()
         .flat_map(|e| e.iter().copied())
         .collect::<IndexSet<_>>();
-    let evaluate = chunks.iter().find_map(|e| e.evaluate);
+    let runtime = chunks.iter().find_map(|e| e.runtime);
     Ok(EcmascriptChunkVc::new_normalized(
         first.await?.context,
         EcmascriptChunkPlaceablesVc::cell(main_entries.into_iter().collect()),
         None,
-        evaluate,
+        runtime,
     ))
 }
 
@@ -389,20 +389,12 @@ async fn optimize_ecmascript(
         }
         for chunk in local.iter_mut() {
             let content = (*chunk).await?;
-            if let Some(evaluate) = content.evaluate {
-                let evaluate = evaluate.await?;
+            if let Some(runtime) = content.runtime {
                 *chunk = EcmascriptChunkVc::new_normalized(
                     content.context,
                     content.main_entries,
                     content.omit_entries,
-                    Some(
-                        EcmascriptChunkEvaluate {
-                            evaluate_entries: evaluate.evaluate_entries,
-                            chunk_group: Some(chunk_group),
-                            chunk_list_path: evaluate.chunk_list_path,
-                        }
-                        .cell(),
-                    ),
+                    Some(runtime.with_chunk_group(chunk_group)),
                 )
             }
         }
