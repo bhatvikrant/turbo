@@ -1,6 +1,6 @@
 {
   "name": "@turbo/workspaces",
-  "version": "0.0.0",
+  "version": "0.0.2",
   "description": "Tools for working with package manager workspaces",
   "homepage": "https://turbo.build/repo",
   "license": "MPL-2.0",
@@ -33,7 +33,6 @@
     "ora": "4.1.1",
     "rimraf": "^3.0.2",
     "semver": "^7.3.5",
-    "turbo-utils": "workspace:*",
     "update-check": "^1.5.4"
   },
   "devDependencies": {
@@ -54,9 +53,13 @@
     "tsconfig": "workspace:*",
     "tsup": "^5.10.3",
     "turbo-test-utils": "workspace:*",
+    "turbo-utils": "workspace:*",
     "typescript": "^4.5.5"
   },
   "files": [
     "dist"
-  ]
+  ],
+  "publishConfig": {
+    "access": "public"
+  }
 }
